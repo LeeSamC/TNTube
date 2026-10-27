@@ -1,14 +1,26 @@
 import { Router } from "express";
 import { db } from "../../db";
-import { eq, isNull, desc, inArray, sql } from "drizzle-orm";
+import { eq, isNull, desc, inArray, sql, and } from "drizzle-orm";
 import { optionalAuthenticateToken } from "../../middleware/optionAuthenticateToken";
 import { AuthenticateReqest } from "../../middleware/authenticateRefreshToken";
 import { users, posts, postMedia, media } from "../../db/schema";
+import { authenticateAccessToken } from "../../middleware/authenticateAccessToken";
 
-
-
+import z from 'zod'
 
 const router = Router()
+
+const createPostSchema = z.object({
+    content: z.string().trim().min(1, 'Post content cannot be empty').max(5000, 'Post content cannot exceed 5000 characters').optional().default(''),
+    mediaIds: z.array(z.uuid()).max(10, 'A post cannot contain more than 10 media files').optional().default([])
+}).refine(
+    (data) => {
+        return data.content.length > 0 || data.mediaIds.length > 0
+    },
+    {
+        message: 'Post must contain text or media'
+    }
+)
 
 type mediaItem = {
     postId: string,
@@ -20,6 +32,35 @@ type mediaItem = {
     height: number | null
     duration: number | null
     sortOrder: number
+}
+
+async function getPostMedia(postId: string, req: any) {
+    const result = await db.select({
+        mediaId: media.mediaId,
+        type: media.type,
+        storageKey: media.storageKey,
+        mimeType: media.mimeType,
+        width: media.width,
+        height: media.height,
+        duration: media. duration,
+        sortOrder: postMedia.sortOrder
+    })
+    .from(postMedia)
+    .innerJoin(
+        media,
+        eq(postMedia.mediaId, media.mediaId)
+    )
+    .where(
+        eq(postMedia.postId, postId)
+    )
+    .orderBy(
+        postMedia.sortOrder
+    )
+
+    return result.map(item => ({
+        ...item,
+        url: `${req.protocol}://${req.get('host')}/uploads/${item.storageKey}`
+    }))
 }
 
 router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, res) => {
@@ -120,5 +161,73 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
         console.error(error)
 
         return res.status(500).json({error: 'Failed to retrieve post'})
+    }
+})
+
+router.post('/', authenticateAccessToken, async (req: AuthenticateReqest, res) => {
+    const validation = createPostSchema.safeParse(req.body)
+
+    if(!validation.success){
+        const err = validation.error
+        return res.status(400).json({error: z.treeifyError(err)})
+    }
+
+    const userId = req.user?.userId 
+
+    if(!userId){
+        throw new Error('UserId is required')
+    }
+
+    const {content, mediaIds} = validation.data
+
+    try{
+        if(mediaIds.length > 0) {
+            const userMedia = await db.select({
+                mediaId: media.mediaId
+            })
+            .from(media)
+            .where(
+                and(
+                    inArray(media.mediaId, mediaIds),
+                    eq(media.uploadedBy, userId)
+                )
+            )
+
+            const ownedMediaIds = new Set(
+                userMedia.map(item => item.mediaId)
+            )
+
+            const unauthorizedMedia = mediaIds.filter(
+                mediaId => !ownedMediaIds.has(mediaId)
+            )
+
+            if(unauthorizedMedia.length > 0) {
+                return res.status(403).json({error: 'You cannot attach media that you do not own'})
+            }
+        }
+
+        const [newPost] = await db.insert(posts).values({
+            userId: userId,
+            content: content || null
+        }).returning()
+
+        if(mediaIds.length > 0) {
+            await db.insert(postMedia).values(mediaIds.map(
+                (mediaId, index) => ({
+                    postId: newPost.postId,
+                    mediaId: mediaId,
+                    sortOrder: index
+                })
+            ))
+        }
+        
+        const postMediaItems = await getPostMedia(newPost.postId, req)
+
+        return res.status(201).json({message: 'Post created', post: {...newPost, media: postMediaItems}})
+        
+    } catch (error){
+        console.error(error)
+
+        return res.status(500).json({error: 'Failed to create post'})
     }
 })
