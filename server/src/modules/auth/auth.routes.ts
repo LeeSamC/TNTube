@@ -2,11 +2,13 @@ import { duration } from 'drizzle-orm/gel-core'
 import {Router} from 'express'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { db } from '../../db'
 import {z} from 'zod'
 
 import { refreshTokens, users } from '../../db/schema'
+import { authenticateRefreshToken, AuthenticateReqest } from '../../middleware/authenticateRefreshToken'
+import { authenticateAccessToken } from '../../middleware/authenticateAccessToken'
 
 const router = Router()
 
@@ -65,7 +67,7 @@ function setAuthCookies(res:any, accessToken: string, refreshToken:string){
     })
 }
 
-function clearAuthToken(res:any){
+function clearAuthCookies(res:any){
     const isProduction = process.env.NODE_ENV === 'production'
 
     const cookieOptions = {
@@ -172,3 +174,99 @@ router.post('/register', async (req, res) => {
     }
 })
 
+router.post('/refresh', authenticateRefreshToken, async (req: AuthenticateReqest, res) => {
+    try{
+        if(!req.user){
+            return res.status(401).json({error: 'Authentication Required'})
+        }
+
+        const oldRefreshToken = req.cookies.refreshToken
+
+        if(!oldRefreshToken){
+            return res.status(401).json({message: 'Refresh token required'})
+        }
+
+        const user = await db.query.users.findFirst({where: eq(users.userId, req.user.userId)})
+
+        if(!user){
+            clearAuthCookies(res)
+            return res.status(404).json({message: 'User not found'})
+        }
+
+        await db.update(refreshTokens).set({revoked: true}).where(eq(refreshTokens.token, oldRefreshToken))
+
+        const accessToken = issueAccessToken(user.userId)
+        const refreshToken = issueRefreshToken(user.userId)
+
+        await db.insert(refreshTokens).values({
+            token: refreshToken,
+            userId: user.userId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            revoked: false
+        })
+
+        setAuthCookies(res, accessToken, refreshToken)
+
+        return res.json({
+            message: 'Successfully refreshed tokens',
+            user: {userId: user.userId}
+        })
+    }catch (error) {
+        console.log(error)
+
+        return res.status(500).json({message: 'Failed to refresh tokens'})
+    }
+})
+
+router.post('/logout', async (req, res) => {
+    try{
+        const refreshToken = req.cookies.refreshToken
+
+        if(refreshToken) {
+            await db.update(refreshTokens).set({revoked: true}).where(eq(refreshTokens.token, refreshToken))
+        }
+
+        clearAuthCookies(res)
+
+        return res.status(200).json({message: 'Successfully logged out'})
+    }catch (error) {
+        console.error(error)
+
+        return res.status(500).json({message: 'Failed to log out'})
+    }
+})
+
+router.get('/me', authenticateAccessToken, async(req: AuthenticateReqest, res) => {
+    try{
+        if(!req.user){
+            return res.status(401).json({message: 'Authentication requred'})
+        }
+
+        const result = await db.select({
+            userId: users.userId,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            username: users.username,
+            
+        })
+        .from(users)
+        .where(
+            eq(users.userId, req.user.userId)
+        )
+        .limit(1)
+
+        const user = result[0]
+
+        if(!user){
+            return res.status(404).json({message: 'User not found'})
+        }
+
+        return res.status(200).json({user})
+
+    }catch (error){
+        console.error(error)
+
+        return res.status(500).json({message: "Failed to fetch user"})
+    }
+    
+})
