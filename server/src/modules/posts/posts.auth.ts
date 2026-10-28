@@ -3,7 +3,7 @@ import { db } from "../../db";
 import { eq, isNull, desc, inArray, sql, and } from "drizzle-orm";
 import { optionalAuthenticateToken } from "../../middleware/optionAuthenticateToken";
 import { AuthenticateReqest } from "../../middleware/authenticateRefreshToken";
-import { users, posts, postMedia, media } from "../../db/schema";
+import { users, posts, postMedia, media, likes, comments } from "../../db/schema";
 import { authenticateAccessToken } from "../../middleware/authenticateAccessToken";
 
 import z from 'zod'
@@ -78,7 +78,35 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
             updatedAt: posts.updatedAt,
 
             userId: users.userId,
-            username: users.username
+            username: users.username,
+
+            likeCount: sql`
+                (
+                    SELECT COUNT(*)::int
+                    FROM ${likes}
+                    WHERE ${likes.postId} = ${posts.postId}
+                )
+            `.as('likeCount'),
+
+            likedByCurrentUser: currentUserId
+                ? sql`
+                        EXISTS (
+                            SELECT 1
+                            FROM ${likes}
+                            WHERE ${likes.postId} = ${posts.postId}
+                            AND ${likes.userId} = ${currentUserId}
+                        )
+                `.as('likedByCurrentUser')
+                :sql`false`.as('likedByCurrentUser'),
+
+            commentCount: sql`
+                (
+                    SELECT COUNT(*)::int
+                    FROM ${comments}
+                    WHERE ${comments.postId} = ${posts.postId}
+                    AND ${comments.deletedAt} IS NULL
+                )
+            `.as('commentCount')
         })
         .from(posts)
         .leftJoin(users, eq(posts.userId, users.userId))
