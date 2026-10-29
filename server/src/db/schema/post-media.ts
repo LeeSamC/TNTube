@@ -1,3 +1,5 @@
+// ONLY USED IN A MANY : MANY RELATIONSHIP
+
 import {pgTable, uuid, integer, primaryKey} from 'drizzle-orm/pg-core'
 import { posts } from './posts'
 import { media } from './media'
