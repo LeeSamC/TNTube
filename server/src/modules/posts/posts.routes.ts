@@ -3,7 +3,7 @@ import { db } from "../../db";
 import { eq, isNull, desc, inArray, sql, and } from "drizzle-orm";
 import { optionalAuthenticateToken } from "../../middleware/optionAuthenticateToken";
 import { AuthenticateReqest } from "../../middleware/authenticateRefreshToken";
-import { users, posts, postMedia, media, likes, comments } from "../../db/schema";
+import { users, posts, postMedia, media, comments, postReactions } from "../../db/schema";
 import { authenticateAccessToken } from "../../middleware/authenticateAccessToken";
 
 import z from 'zod'
@@ -91,21 +91,34 @@ async function getPostWithDetails(postId: string, currentUserId: string | null, 
         likeCount: sql<number>`
             (
                 SELECT COUNT(*)::int
-                FROM ${likes}
-                WHERE ${likes.postId} = ${posts.postId}
+                FROM ${postReactions}
+                WHERE ${postReactions.postId} = ${posts.postId}
+                AND ${postReactions.type} = 'LIKE'
             )
         `.as('likeCount'),
 
-        likedByCurrentUser: currentUserId
-            ? sql<boolean>`
+        dislikeCount: sql<number>`
+            (
+                SELECT COUNT(*)::int
+                FROM ${postReactions}
+                WHERE ${postReactions.postId} = ${posts.postId}
+                AND ${postReactions.type} = 'DISLIKE'
+            )
+        `.as('dislikeCount'),
+
+        currentUserReaction: currentUserId
+            ? sql<'LIKE' | 'DISLIKE' | null>`
                 (
-                    SELECT 1
-                    FROM ${likes}
-                    WHERE ${likes.postId} = ${posts.postId}
-                    AND ${likes.userId} = ${currentUserId}
+                    SELECT ${postReactions.type}
+                    FROM ${postReactions}
+                    WHERE ${postReactions.postId} = ${posts.postId}
+                    AND ${postReactions.userId} = ${currentUserId}
+                    LIMIT 1
                 )
-            `.as('likedByCurrentUser')
-            : sql<boolean>`false`.as('likedByCurrentUser'),
+            `.as('currentUserReaction')
+            : sql<'LIKE' | 'DISLIKE' | null>`
+                NULL
+            `.as('currentUserReaction'),
 
         commentCount: sql<number>`
             (
@@ -162,10 +175,13 @@ async function getPostWithDetails(postId: string, currentUserId: string | null, 
         description: post.description,
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
+
         userId: post.userId,
         username: post.username,
+
         likeCount: post.likeCount,
-        likedByCurrentUser: post.likedByCurrentUser,
+        diislikeCount: post.dislikeCount,
+        currentUserReaction: post.currentUserReaction,
         commentCount: post.commentCount,
         media: postMedia,
     }
@@ -189,26 +205,39 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
             userId: users.userId,
             username: users.username,
 
-            likeCount: sql`
+            likeCount: sql<number>`
                 (
                     SELECT COUNT(*)::int
-                    FROM ${likes}
-                    WHERE ${likes.postId} = ${posts.postId}
+                    FROM ${postReactions}
+                    WHERE ${postReactions.postId} = ${posts.postId}
+                    AND ${postReactions.type} = 'LIKE'
                 )
             `.as('likeCount'),
 
-            likedByCurrentUser: currentUserId
-                ? sql`
-                        EXISTS (
-                            SELECT 1
-                            FROM ${likes}
-                            WHERE ${likes.postId} = ${posts.postId}
-                            AND ${likes.userId} = ${currentUserId}
-                        )
-                `.as('likedByCurrentUser')
-                :sql`false`.as('likedByCurrentUser'),
+            dislikeCount: sql<number>`
+                (
+                    SELECT COUNT(*)::int
+                    FROM ${postReactions}
+                    WHERE ${postReactions.postId} = ${posts.postId}
+                    AND ${postReactions.type} = 'DISLIKE'
+                )
+            `.as('dislikeCount'),
 
-            commentCount: sql`
+            currentUserReaction: currentUserId
+                ? sql<'LIKE' | 'DISLIKE' | null>`
+                    (
+                        SELECT ${postReactions.type}
+                        FROM ${postReactions}
+                        WHERE ${postReactions.postId} = ${posts.postId}
+                        AND ${postReactions.userId} = ${currentUserId}
+                        LIMIT 1
+                    )
+                `.as('currentUserReaction')
+                : sql<'LIKE' | 'DISLIKE' | null>`
+                    NULL
+                `.as('currentUserReaction'),
+
+            commentCount: sql<number>`
                 (
                     SELECT COUNT(*)::int
                     FROM ${comments}
@@ -267,7 +296,8 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
                     userId: post.userId,
                     username: post.username,
                     likeCount: post.likeCount,
-                    likedByCurrentUser: post.likedByCurrentUser,
+                    dislikeCount: post.dislikeCount,
+                    currentUserReaction: post.currentUserReaction,
                     commentCount: post.commentCount,
                     media: postMedia,
                 }
@@ -438,5 +468,47 @@ router.patch('/:id', authenticateAccessToken, async(req:AuthenticateReqest, res)
         console.error(error)
 
         return res.status(500).json({error: 'Failed to updated post'})
+    }
+})
+
+router.delete('/:id', authenticateAccessToken, async (req:AuthenticateReqest, res) => {
+    try{
+        const currentUserId = req.user?.userId
+        const currentPostId = req.params.id as string
+
+        if(!currentUserId){
+            return res.status(401).json({error: 'Authentication required'})
+        }
+
+        const [existingPost] = await db.select({
+            postId: posts.postId,
+            userId: posts.userId
+        })
+        .from(posts)
+        .where(
+            and(
+                eq(posts.postId, currentPostId),
+                eq(posts.userId, currentUserId),
+                isNull(posts.deletedAt)
+            )
+        )
+        .limit(1)
+
+        if(!existingPost){
+            return res.status(404).json({error: 'Post not found'})
+        }
+
+        await db.update(posts).set({
+            deletedAt: new Date()
+        })
+        .where(
+            eq(posts.postId, existingPost.postId)
+        )
+
+        return res.status(200).json({message: 'Deleted post sucessfully'})
+    }catch (error) {
+        console.error(error)
+
+        return res.status(500).json({error: 'Failed to delete post'})
     }
 })
