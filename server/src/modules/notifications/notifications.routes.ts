@@ -18,7 +18,7 @@ type CreateNotificationParams ={
     reactionId: string | null
 }
 
-const createNotification = async({recipientId, actorId, type, postId = null, commentId = null, reactionId = null}: CreateNotificationParams) => {
+export const createNotification = async({recipientId, actorId, type, postId = null, commentId = null, reactionId = null}: CreateNotificationParams) => {
     if(recipientId === actorId){
         return
     }
