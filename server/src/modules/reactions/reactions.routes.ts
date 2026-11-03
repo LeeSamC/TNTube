@@ -6,6 +6,7 @@ import { db } from "../../db";
 import { eq, and, isNull } from "drizzle-orm";
 import { postReactions, posts } from "../../db/schema";
 import z from 'zod'
+import { createNotification } from "../notifications/notifications.routes";
 
 const router = Router()
 
@@ -96,6 +97,15 @@ router.put('/:id', authenticateAccessToken, async (req: AuthenticateReqest, res)
             userId: postReactions.userId,
             type: postReactions.type,
             createdAt: postReactions.createdAt
+        })
+
+        await createNotification({
+            recipientId: post.userId,
+            actorId: currentUserId,
+            type: 'reaction',
+            postId: currentPostId,
+            commentId: null,
+            reactionId: reaction.reactionId
         })
 
         return res.status(200).json({
