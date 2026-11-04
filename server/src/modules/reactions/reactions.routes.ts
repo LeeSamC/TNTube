@@ -160,3 +160,5 @@ router.delete('/:id', authenticateAccessToken, async (req:AuthenticateReqest, re
         return res.status(500).json({error: 'Failed to remove reaction'})
     }
 })
+
+export default router

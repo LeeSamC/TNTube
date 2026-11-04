@@ -115,3 +115,5 @@ router.delete('/:id', authenticateAccessToken, async (req: AuthenticateRequest, 
         return res.status(500).json({error: 'Failed to unsubscribe'})
     }
 })
+
+export default router

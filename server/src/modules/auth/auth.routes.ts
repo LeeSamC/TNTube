@@ -270,3 +270,5 @@ router.get('/me', authenticateAccessToken, async(req: AuthenticateReqest, res) =
     }
     
 })
+
+export default router

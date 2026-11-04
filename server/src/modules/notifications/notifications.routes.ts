@@ -181,3 +181,5 @@ router.patch('/read-all', authenticateAccessToken, async (req:AuthenticateReqest
         return res.status(500).json({error: 'Failed to mark all notifications as read'})
     }
 })
+
+export default router

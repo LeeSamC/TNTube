@@ -248,3 +248,5 @@ router.delete('/:id', authenticateAccessToken, async (req: AuthenticateReqest, r
         return res.status(500).json({error: 'Failed to delete comment'})
     }
 })
+
+export default router
