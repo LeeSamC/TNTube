@@ -180,7 +180,7 @@ async function getPostWithDetails(postId: string, currentUserId: string | null, 
         username: post.username,
 
         likeCount: post.likeCount,
-        diislikeCount: post.dislikeCount,
+        dislikeCount: post.dislikeCount,
         currentUserReaction: post.currentUserReaction,
         commentCount: post.commentCount,
         media: postMedia,
