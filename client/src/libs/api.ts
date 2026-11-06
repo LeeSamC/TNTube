@@ -74,7 +74,7 @@ export async function api<T>(endpoint: string, options: ApiOptions = {}): Promis
         }
     }
 
-    let data: any = null
+    let data: unknown
 
     try{
         data = await response.json()
@@ -82,8 +82,9 @@ export async function api<T>(endpoint: string, options: ApiOptions = {}): Promis
         data = null
     }
 
-    if(!response.ok){
-        throw new Error(data?.message || 'Request failed')
+    if (!response.ok) {
+        const message = data && typeof data === 'object' && 'message' in data ? data.message : undefined
+        throw new Error(typeof message === 'string' && message ? message : 'Request failed')
     }
 
     return data as T
