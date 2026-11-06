@@ -1,4 +1,4 @@
-import { duration } from 'drizzle-orm/gel-core'
+import { randomUUID } from 'node:crypto'
 import {Router} from 'express'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
@@ -35,7 +35,7 @@ function issueAccessToken(userId:string){
         throw new Error('Access token secret not configured')
     }
 
-    return jwt.sign(userId, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '30m'})
+    return jwt.sign({ userId }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '30m' })
 }
 
 function issueRefreshToken(userId: string){
@@ -43,7 +43,7 @@ function issueRefreshToken(userId: string){
         throw new Error('Refresh token secret not configured')
     }
 
-    return jwt.sign(userId, process.env.REFRESH_TOKEN_SECRET, {expiresIn: '7d'})
+    return jwt.sign({ userId }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d', jwtid: randomUUID() })
 }
 
 function setAuthCookies(res:any, accessToken: string, refreshToken:string){
@@ -63,7 +63,7 @@ function setAuthCookies(res:any, accessToken: string, refreshToken:string){
 
     res.cookie('refreshToken', refreshToken, {
         ...cookieOptions,
-        maxAge: 7 * 24 * 60 * 60 * 100
+        maxAge: 7 * 24 * 60 * 60 * 1000
     })
 }
 
@@ -88,25 +88,26 @@ router.post('/login', async (req, res) => {
         const user = await db.query.users.findFirst({where: eq(users.username, data.username)})
 
         if(!user){
-            return res.status(401).json({message: 'Username or password invalid'})
+            return res.status(401).json({message: 'The username or password is incorrect.'})
         }
 
         const validPassword = await bcrypt.compare(data.password, user.passwordHash)
 
         if(!validPassword){
-            return res.status(401).json({message: 'Username or password invalid'})
+            return res.status(401).json({message: 'The username or password is incorrect.'})
         }
-
-        await db.delete(refreshTokens).where(eq(refreshTokens.userId, user.userId))
 
         const accessToken = issueAccessToken(user.userId)
         const refreshToken = issueRefreshToken(user.userId)
 
-        await db.insert(refreshTokens).values({
-            token: refreshToken,
-            userId: user.userId,
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            revoked: false
+        await db.transaction(async tx => {
+            await tx.delete(refreshTokens).where(eq(refreshTokens.userId, user.userId))
+            await tx.insert(refreshTokens).values({
+                token: refreshToken,
+                userId: user.userId,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                revoked: false,
+            })
         })
 
         setAuthCookies(res, accessToken, refreshToken)
@@ -123,7 +124,7 @@ router.post('/login', async (req, res) => {
     }catch (error){
         console.error(error)
 
-        return res.status(500).json({message: 'Failedt to log in'})
+        return res.status(500).json({message: 'Could not sign in. Try again in a moment.'})
     }
 })
 
@@ -131,46 +132,48 @@ router.post('/register', async (req, res) => {
     try{
         const data = registerSchema.parse(req.body)
 
-        const user = await db.query.users.findFirst({where: eq(users.username, data.username)})
+        const passwordHash = await bcrypt.hash(data.password, 12)
+        const registration = await db.transaction(async tx => {
+            const [user] = await tx.insert(users).values({
+                firstName: data.firstName,
+                lastName: data.lastName,
+                username: data.username,
+                passwordHash,
+            }).onConflictDoNothing({ target: users.username }).returning({
+                userId: users.userId,
+                firstName: users.firstName,
+                lastName: users.lastName,
+                username: users.username,
+            })
 
-        if(user){
-            return res.status(409).json({message: 'Username already exist'})
+            if (!user) return null
+
+            const accessToken = issueAccessToken(user.userId)
+            const refreshToken = issueRefreshToken(user.userId)
+            await tx.insert(refreshTokens).values({
+                token: refreshToken,
+                userId: user.userId,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                revoked: false,
+            })
+
+            return { user, accessToken, refreshToken }
+        })
+
+        if (!registration) {
+            return res.status(409).json({ message: 'That username is taken. Choose a different one.' })
         }
 
-        const passwordHash = await bcrypt.hash(data.password, 12)
-
-        const [newUser] = await db.insert(users).values({
-            firstName: data.firstName,
-            lastName: data.lastName,
-            username: data.username,
-            passwordHash: passwordHash
-        }).returning({
-            userId: users.userId,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            username: users.username
-        })
-
-        const accessToken = issueAccessToken(newUser.userId)
-        const refreshToken = issueRefreshToken(newUser.userId)
-
-        await db.insert(refreshTokens).values({
-            token: refreshToken,
-            userId: newUser.userId,
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            revoked: false
-        })
-
-        setAuthCookies(res, accessToken, refreshToken)
+        setAuthCookies(res, registration.accessToken, registration.refreshToken)
 
         return res.status(201).json({
             message: 'Successfully registered user',
-            user: newUser
+            user: registration.user
         })
     }catch (error){
         console.error(error)
 
-        return res.status(500).json({message: 'Failed to register user'})
+        return res.status(500).json({message: 'Could not create your account. Try again in a moment.'})
     }
 })
 
