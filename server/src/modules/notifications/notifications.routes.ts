@@ -69,7 +69,7 @@ router.get('/', authenticateAccessToken, async(req:AuthenticateReqest, res) => {
         .limit(10)
 
         const formattedNotifications = notificationResult.map(n => ({
-            notificatonId: n.notificationId,
+            notificationId: n.notificationId,
             type: n.type,
             isRead: n.isRead,
             createdAt: n.createdAt,
