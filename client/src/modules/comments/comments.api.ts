@@ -11,19 +11,27 @@ export type Comment = {
     content: string
 }
 
+export type CommentWithReplies = Omit<Comment, 'deletedAt'> & {
+    username: string
+    replies: CommentWithReplies[]
+}
+
+export type AddCommentInput = {
+    content: string
+    parentCommentId: string | null
+}
+
+export type EditCommentInput = {
+    content: string
+}
+
 export async function getComments(id: string) {
     return api<{
-        comments: Comment[]
+        comments: CommentWithReplies[]
     }>(`/comments/${id}`)
 }
 
-export async function addComment(
-    id: string,
-    data: {
-        content: string
-        parentCommentId: string | null
-    }
-) {
+export async function addComment(id: string, data: AddCommentInput) {
     return api<{
         comment: Comment
     }>(`/comments/${id}`, {
@@ -32,12 +40,7 @@ export async function addComment(
     })
 }
 
-export async function editComment(
-    id: string,
-    data: {
-        content: string
-    }
-){
+export async function editComment(id: string, data: EditCommentInput) {
     return api<{
         comment: Comment
     }>(`/comments/${id}`, {
