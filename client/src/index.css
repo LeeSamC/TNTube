@@ -14,6 +14,117 @@
 
 }
 
+.tube {
+  --canvas: #101218;
+  --panel: #171a22;
+  --inset: #232733;
+  --line: #454a57;
+  --control: #747984;
+  --muted: #b9beca;
+  --text: #f8f9fb;
+
+  min-height: 100svh;
+  background: var(--canvas);
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.tube :is(a, button, input, video):focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+.tube-title {
+  font-family: Bahnschrift, 'Avenir Next', system-ui, sans-serif;
+  letter-spacing: -0.035em;
+}
+
+.tube-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.tube-search {
+  grid-column: 1 / -1;
+  grid-row: 2
+}
+
+.tube-link a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  color: var(--muted);
+}
+
+.tube-links a:hover,
+.tube-links a[aria-current='page'] {
+  background: var(--inset);
+  color: var(--text)
+}
+
+.tube-links a[aria-current='page']{
+  box-shadow: inset 2px 0 var(--text);
+}
+
+.tube-account-menu {
+  position: fixed;
+  inset: 3.75rem 1rem auto auto;
+  width: min(16rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.tube-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(19rem, calc(100vw - 3rem));
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.tube-drawer::backdrop {
+  background: #080a10b3;
+}
+
+html:has(.tube-drawer[open]) {
+  overflow: hidden;
+}
+
+@media (min-width: 48rem) {
+    .tube-header {
+        grid-template-columns: minmax(8rem, 1fr) minmax(0, 36rem) minmax(8rem, 1fr);
+        min-height: 4.5rem;
+        padding-inline: 1.5rem;
+    }
+
+    .tube-search {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .tube-account-menu {
+        inset: 4.25rem 1.5rem auto auto;
+    }
+}
+
 * {
   box-sizing: border-box;
 }
