@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../../db";
-import { eq, isNull, desc, inArray, sql, and } from "drizzle-orm";
+import { eq, isNull, desc, inArray, sql, and, or } from "drizzle-orm";
 import { optionalAuthenticateToken } from "../../middleware/optionAuthenticateToken";
 import { AuthenticateReqest } from "../../middleware/authenticateRefreshToken";
 import { users, posts, postMedia, media, comments, postReactions } from "../../db/schema";
@@ -190,6 +190,26 @@ async function getPostWithDetails(postId: string, currentUserId: string | null, 
 router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, res) => {
     const currentUserId = req.user?.userId ?? null
 
+    const search = z.string()
+        .trim()
+        .max(100)
+        .refine(term => !term.includes('/0'))
+        .optional()
+        .safeParse(req.query.q)
+
+    if(!search.success){
+        return res.status(400).json({message: 'Enter a single search term of up to 100 characters'})
+    }
+
+    const term = search.data
+    const visiblePosts = and(
+        isNull(posts.deletedAt),
+        term ? or(
+            sql`strpos(lower(${posts.title}), lower(${term})) > 0`,
+            sql`strpos(lower(${users.username}), lower(${term})) > 0`
+        ): undefined
+    )
+
     try{
         const page = Math.max(Number.parseInt(String(req.query.page), 10) || 1, 1)
         const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit), 10) || 10, 1), 50)
@@ -258,8 +278,8 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
         .from(posts)
         .leftJoin(users, eq(posts.userId, users.userId))
         .leftJoin(media, eq(posts.mediaId, media.mediaId))
-        .where(isNull(posts.deletedAt))
-        .orderBy(desc(posts.createdAt))
+        .where(visiblePosts)
+        .orderBy(desc(posts.createdAt), desc(posts.postId))
         .limit(limit)
         .offset(offset)
 
@@ -267,7 +287,8 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
             count: sql<number>`COUNT(*)::int`.as('count')
         })
         .from(posts)
-        .where(isNull(posts.deletedAt))
+        .leftJoin(users, eq(posts.userId, users.userId))
+        .where(visiblePosts)
 
         const postsWithMedia = result.map((post) => {
             const postMedia: PostMediaItem | null = 
