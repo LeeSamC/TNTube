@@ -44,11 +44,13 @@ export type CreatePostInput = {
 
 export type UpdatePostInput = Partial<CreatePostInput>
 
-export async function getAllPosts(page = 1, limit = 10) {
+export async function getAllPosts(page = 1, limit = 10, term='') {
     const query = new URLSearchParams({
         page: String(page),
         limit: String(limit),
     })
+
+    if(term) query.set('q', term)
 
     return api<{
         posts: Post[]
