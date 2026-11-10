@@ -6,6 +6,16 @@ type ApiOptions = {
     headers?: HeadersInit
 }
 
+export class ApiError extends Error {
+    readonly status: number
+
+    constructor(message: string, status: number){
+        super(message)
+        this.name = 'ApiError'
+        this.status = status
+    }
+}
+
 async function makeRequest(endpoint: string, options: ApiOptions = {}): Promise<Response> {
     const headers = new Headers(options.headers)
     if(options.body !== undefined){
@@ -84,7 +94,10 @@ export async function api<T>(endpoint: string, options: ApiOptions = {}): Promis
 
     if (!response.ok) {
         const message = data && typeof data === 'object' && 'message' in data ? data.message : undefined
-        throw new Error(typeof message === 'string' && message ? message : 'Request failed')
+        throw new ApiError(
+            typeof message === 'string' && message ? message : 'Request failed',
+            response.status
+        )
     }
 
     return data as T
