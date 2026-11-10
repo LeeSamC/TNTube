@@ -8,8 +8,8 @@ export const PostKeys = {
     
     lists: () =>
         [...PostKeys.all, 'list'] as const,
-    list: (page: number, limit: number, viewerId: string | null) =>
-        [...PostKeys.lists(), viewerId, {page, limit}] as const,
+    list: (page: number, limit: number, viewerId: string | null, term = '') =>
+        [...PostKeys.lists(), viewerId, term, {page, limit}] as const,
     details: () => 
         [...PostKeys.all, 'detail'] as const,
 
@@ -17,13 +17,13 @@ export const PostKeys = {
         [...PostKeys.details(), id] as const 
 }
 
-export function useGetAllPosts(page = 1, limit = 10) {
+export function useGetAllPosts(page = 1, limit = 10, term = '') {
     const viewerId = useAuthStore(state => state.user?.userId ?? null)
     const isInitialized = useAuthStore(state => state.isInitialized)
 
     return useQuery({
-        queryKey: PostKeys.list(page, limit, viewerId),
-        queryFn: isInitialized ? () => getAllPosts(page, limit) : skipToken,
+        queryKey: PostKeys.list(page, limit, viewerId, term),
+        queryFn: isInitialized ? () => getAllPosts(page, limit, term) : skipToken,
         placeholderData: (previousData, previousQuery) =>
             previousQuery?.queryKey[2] === viewerId ? previousData : undefined
     })
