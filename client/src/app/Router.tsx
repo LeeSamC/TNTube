@@ -4,6 +4,7 @@ import AppLayout from '../layouts/AppLayout'
 import LoginPage from '../modules/auth/pages/LoginPage'
 import RegistrationPage from '../modules/auth/pages/RegistrationPage'
 import DashboardPage from '../pages/DashboardPage'
+import PostDetailPage from '../modules/posts/pages/PostDetailsPage'
 
 export const router = createBrowserRouter([
     {
@@ -15,6 +16,10 @@ export const router = createBrowserRouter([
     },
     {
         element: <AppLayout />,
-        children: [{ path: '/', element: <DashboardPage /> }],
+        children: [
+            { path: '/', element: <DashboardPage /> },
+            { path: '/posts/:postId', element: <PostDetailPage /> },
+        ],
+
     },
 ])
