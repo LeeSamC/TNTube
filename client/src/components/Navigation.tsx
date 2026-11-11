@@ -2,6 +2,7 @@ import {useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent} from 
 import {Link, NavLink, useLocation, useNavigate, useSearchParams} from 'react-router-dom'
 import {House, Menu, Search, X} from 'lucide-react'
 import { useAuthStore } from '../stores/auth.store'
+import NotificationsDropDown from '../modules/notifications/componenets/NotificationsDropdown'
 
 export function SideBarLinks({onNavigate}: {onNavigate?: () => void}) {
     return (
@@ -114,9 +115,15 @@ export default function Navigation() {
                 </Link> 
             </div>
 
-            <SiteSearch/>
+            <div className="tube-search-area">
+                <SiteSearch />
+            </div>
 
-            <div className='justify-self-end'>
+            <div className='flex items-center gap-3 justify-self-end'>
+                {isInitialized && user && (
+                    <NotificationsDropDown key={`${user.userId}-${location.key}`} />
+                )}
+                
                 {isInitialized && (user ? (
                     <>
                         <button
