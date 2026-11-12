@@ -9,6 +9,8 @@ import postsRouter from './modules/posts/posts.routes.js'
 import reactionsRouter from './modules/reactions/reactions.routes.js'
 import subscriptionsRouter from './modules/subscriptions/subscriptions.routes.js'
 
+import mediaRouter, {uploadsDirectory} from './modules/media/media.routes.js'
+
 
 
 const app = express()
@@ -30,6 +32,17 @@ app.get('/api/health', (req, res) => {
     })
 })
 
+app.use('/uploads',
+    express.static(uploadsDirectory, {
+        dotfiles: 'deny',
+        index: false,
+        setHeaders: res => {
+            res.setHeader('X-Content-Type-Options', 'nosniff')
+        },
+    }),
+)
+
+app.use('/api/media', mediaRouter)
 app.use('/api/auth', authRouter )
 app.use('/api/comments', commentsRouter)
 app.use('/api/notifications', notificationRouter)
