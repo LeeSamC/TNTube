@@ -18,8 +18,16 @@ export class ApiError extends Error {
 
 async function makeRequest(endpoint: string, options: ApiOptions = {}): Promise<Response> {
     const headers = new Headers(options.headers)
-    if(options.body !== undefined){
-        headers.set('Content-type', 'application/json')
+    const isFormData = options.body instanceof FormData
+
+    let body: BodyInit | undefined
+
+    if(isFormData){
+        headers.delete('Content-Type')
+        body = options.body as FormData
+    }else if (options.body !== undefined){
+        headers.set('Content-Type', 'application/json')
+        body = JSON.stringify(options.body)
     }
 
     return fetch(
@@ -28,10 +36,7 @@ async function makeRequest(endpoint: string, options: ApiOptions = {}): Promise<
             method: options.method || 'GET',
             headers,
             credentials: 'include',
-            body: 
-                options.body !== undefined
-                    ? JSON.stringify(options.body)
-                    : undefined
+            body
         }
     )
 }
@@ -93,11 +98,17 @@ export async function api<T>(endpoint: string, options: ApiOptions = {}): Promis
     }
 
     if (!response.ok) {
-        const message = data && typeof data === 'object' && 'message' in data ? data.message : undefined
-        throw new ApiError(
-            typeof message === 'string' && message ? message : 'Request failed',
-            response.status
-        )
+        let message = 'Request failed'
+
+        if(data && typeof data === 'object') {
+            if('message' in data && typeof data.message === 'string'){
+                message = data.message
+            }else if('error' in data && typeof data.error === 'string'){
+                message = data.error
+            }
+        }
+
+        throw new ApiError(message, response.status)
     }
 
     return data as T
