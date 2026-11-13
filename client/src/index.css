@@ -127,6 +127,11 @@
   color: var(--text);
 }
 
+.tube textarea:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 3px;
+}
+
 .tube-drawer::backdrop {
   background: #080a10b3;
 }
