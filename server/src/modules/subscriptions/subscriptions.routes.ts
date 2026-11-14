@@ -5,8 +5,51 @@ import { subscriptions, users } from "../../db/schema";
 import { db } from "../../db";
 import { eq, and } from "drizzle-orm";
 import { createNotification } from "../notifications/notifications.routes";
+import z from 'zod'
 
 const router = Router()
+
+router.get('/:id', authenticateAccessToken, async(req:AuthenticateRequest, res) => {
+    const currentUserId = req.user?.userId
+
+    if(!currentUserId){
+        return res.status(401).json({message: 'Authentication required'})
+    }
+
+    const validation = z.uuid().safeParse(req.params.id)
+
+    if(!validation.success){
+        return res.status(400).json({message: 'Invalid creator ID'})
+    }
+
+    const creatorId = validation.data
+
+    try{
+        const creator = await db.query.users.findFirst({where: eq(users.userId, creatorId), columns: {userId: true}})
+
+        if(!creator){
+            return res.status(404).json({message: 'Creator not found'})
+        }
+
+        const subscription = await db.query.subscriptions.findFirst({where:
+            and(
+                eq(subscriptions.subscriberId, currentUserId),
+                eq(subscriptions.subscribeeId, creator.userId)
+            ),
+            columns: {
+                subscriberId: true
+            }
+        })
+
+        return res.status(200).json({
+            isSubscribed: Boolean(subscription)
+        })
+    }catch (error){
+        console.error(error)
+
+        return res.status(500).json({message: 'Could not check is user is subscribed'})
+    }
+})
 
 router.post('/:id', authenticateAccessToken, async (req: AuthenticateRequest, res) => {
     try{
