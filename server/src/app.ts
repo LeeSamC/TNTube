@@ -11,6 +11,8 @@ import subscriptionsRouter from './modules/subscriptions/subscriptions.routes.js
 
 import mediaRouter, {uploadsDirectory} from './modules/media/media.routes.js'
 
+import { ensureViewerCookie } from './middleware/ensureViewerCookie.js'
+
 
 
 const app = express()
@@ -23,7 +25,14 @@ app.use(
 )
 
 app.use(express.json())
-app.use(cookieParser())
+
+const cookieSecret = process.env.COOKIE_SECRET
+
+if(!cookieSecret){
+    throw new Error('COOKIE_SECRET is not configured')
+}
+
+app.use(cookieParser(cookieSecret))
 
 app.get('/api/health', (req, res) => {
     res.json({
@@ -46,7 +55,7 @@ app.use('/api/media', mediaRouter)
 app.use('/api/auth', authRouter )
 app.use('/api/comments', commentsRouter)
 app.use('/api/notifications', notificationRouter)
-app.use('/api/posts', postsRouter)
+app.use('/api/posts', ensureViewerCookie, postsRouter)
 app.use('/api/reactions', reactionsRouter)
 app.use('/api/subscriptions', subscriptionsRouter)
 
