@@ -5,7 +5,11 @@ import { PostMeta } from "../components/PostPresentation";
 import { ApiError } from "../../../libs/api";
 import { useGetPost } from "../hooks/usePosts"; 
 
+import PostActions from "../components/PostActions";
+import { useAuthStore } from "../../../stores/auth.store";
+
 function PostVideo({url}: {url: string}) {
+
     const [failed, setFailed] = useState(false)
     const source = URL.canParse(url) ? new URL(url) : null
     const playable = source && ['http:', 'https:'].includes(source.protocol) && !source.username && !source.password
@@ -31,6 +35,7 @@ function PostVideo({url}: {url: string}) {
 
 export default function PostDetailPage() {
     const {postId} = useParams()
+    const viewerId = useAuthStore(state => state.user?.userId ?? null)
     const id = z.guid().safeParse(postId)
     const {data, error, isPending, refetch} = useGetPost(id.data)
     const unavailable = !id.success || (error instanceof ApiError && error.status === 404)
@@ -62,6 +67,10 @@ export default function PostDetailPage() {
                     )}
                     <h1 className="tube-title wrap-break-word text-3xl font-bold">{post.title}</h1>
                     <PostMeta username={post.username} createdAt={post.createdAt} />
+                    <PostActions 
+                        key={`${post.postId}-${viewerId ?? 'guest'}`}
+                        post={post}
+                    />
                     {post.description?.trim() && (
                         <p className="mt-4 max-w-prose whitespace-pre-wrap wrap-break-word text-(--muted)">
                             {post.description}
