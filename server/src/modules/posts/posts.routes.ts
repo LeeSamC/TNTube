@@ -1,15 +1,32 @@
 import { Router } from "express";
 import { db } from "../../db";
-import { eq, isNull, desc, inArray, sql, and, or } from "drizzle-orm";
+import { eq, isNull, desc, sql, and, or } from "drizzle-orm";
 import { optionalAuthenticateToken } from "../../middleware/optionAuthenticateToken";
 import { AuthenticateReqest } from "../../middleware/authenticateRefreshToken";
-import { users, posts, postMedia, media, comments, postReactions } from "../../db/schema";
+import { users, posts, postMedia, media, comments, postReactions, postViews } from "../../db/schema";
 import { authenticateAccessToken } from "../../middleware/authenticateAccessToken";
 
 import z from 'zod'
+import {rateLimit} from 'express-rate-limit'
 
 
 const router = Router()
+
+const viewLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: {error: 'Too many view requests. Try again'}
+})
+
+const clientUrl = process.env.CLIENT_URL
+
+if(!clientUrl){
+    throw new Error('CLIENT_URL is not configured')
+}
+
+const clientOrigin = new URL(clientUrl).origin
 
 const createPostSchema = z.object({
     title: z.string().trim().min(1, 'Title cannot be empty').max(100, 'Title cannot exceed 100 characters'),
@@ -84,6 +101,7 @@ async function getPostWithDetails(postId: string, currentUserId: string | null, 
         description: posts.description,
         createdAt: posts.createdAt,
         updatedAt: posts.updatedAt,
+        viewCount: posts.viewCount,
 
         userId: users.userId,
         username: users.username,
@@ -175,6 +193,7 @@ async function getPostWithDetails(postId: string, currentUserId: string | null, 
         description: post.description,
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
+        viewCount: post.viewCount,
 
         userId: post.userId,
         username: post.username,
@@ -221,6 +240,7 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
             description: posts.description,
             createdAt: posts.createdAt,
             updatedAt: posts.updatedAt,
+            viewCount: posts.viewCount,
 
             userId: users.userId,
             username: users.username,
@@ -314,6 +334,7 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
                     description: post.description,
                     createdAt: post.createdAt,
                     updatedAt: post.updatedAt,
+                    viewCount: post.viewCount,
                     userId: post.userId,
                     username: post.username,
                     likeCount: post.likeCount,
@@ -531,6 +552,134 @@ router.delete('/:id', authenticateAccessToken, async (req:AuthenticateReqest, re
         console.error(error)
 
         return res.status(500).json({error: 'Failed to delete post'})
+    }
+})
+
+
+router.post('/:id/views', viewLimiter,optionalAuthenticateToken, async(req: AuthenticateReqest, res) => {
+
+    const parsedId = z.uuid().safeParse(req.params.id)
+
+    if(!parsedId.success){
+        return res.status(400).json({error: 'Invalid post ID'})
+    }
+    
+    if(req.get('origin') !== process.env.CLIENT_URL) {
+        return res.status(403).json({error: 'Invalid request origin'})
+    }
+
+    const userId = req.user?.userId
+    const guestId = z.uuid().safeParse(req.signedCookies.viewerId)
+
+    if(!userId && !guestId.success){
+        return res.status(400).json({error: 'Viewer identity is missing'})
+    }
+
+    const viewerKey = userId
+        ? `user:${userId}`
+        : `guest: ${guestId.data}`
+
+    const postId = parsedId.data
+
+    try{
+        const result = await db.transaction(async tx => {
+            const [post] = await tx.select({
+                postId: posts.postId,
+                mediaId: posts.mediaId,
+                viewCount: posts.viewCount,
+            })
+            .from(posts)
+            .where(
+                and(
+                    eq(posts.postId, postId),
+                    isNull(posts.deletedAt)
+                )
+            )
+            .limit(1)
+            .for('update')
+
+            if(!post){
+                return {status: 'not-found'} as const
+            }
+
+            if(!post.mediaId){
+                return {status: 'not-video'} as const
+            }
+
+            const [video] = await tx.select({type: media.type})
+                .from(media)
+                .where(
+                    eq(media.mediaId, post.mediaId)
+                )
+                .limit(1)
+
+            if(video.type !== 'video'){
+                return {status: 'not-video'} as const
+            }
+
+            const [acceptedView] = await tx.insert(postViews).values({
+                postId,
+                viewerKey,
+                lastCountedAt: sql`now() AT TIME ZONE 'UTC'`,
+            })
+            .onConflictDoUpdate({
+                target: [
+                    postViews.postId,
+                    postViews.viewerKey,
+                ],
+                set: {
+                    lastCountedAt:
+                        sql`now() AT TIME ZONE 'UTC'`
+                },
+                setWhere: sql`
+                    ${postViews.lastCountedAt}
+                    <= (now() AT TIME ZONE 'UTC')
+                        -interval '24 hours'
+                `,
+            })
+            .returning({
+                postId: postViews.postId
+            })
+
+            if(!acceptedView){
+                return {
+                    status: 'ok',
+                    counted: false,
+                    viewCount: post.viewCount
+                } as const
+            }
+
+            const [updatedPost] = await tx.update(posts).set({
+                viewCount: sql`${posts.viewCount} + 1`
+            })
+            .where(eq(posts.postId, postId))
+            .returning({
+                viewCount: posts.viewCount
+            })
+
+            return {
+                status: 'ok',
+                counted: true,
+                viewCount: updatedPost.viewCount,
+            } as const
+        })
+
+        if(result.status === 'not-found') {
+            return res.status(404).json({error: 'Post not found'})
+        }
+
+        if(result.status === 'not-video'){
+            return res.status(400).json({error: 'Only video posts can receive views'})
+        }
+
+        return res.status(200).json({
+            counted: result.counted,
+            viewCount: result.viewCount
+        })
+    }catch (error) {
+        console.error('Failed to record view:', error)
+
+        return res.status(500).json({error: 'Failed to record view'})
     }
 })
 
