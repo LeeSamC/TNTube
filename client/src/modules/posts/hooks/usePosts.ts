@@ -1,5 +1,5 @@
 import {useQuery, useMutation, useQueryClient, skipToken} from "@tanstack/react-query"
-import { createPost, deletePost, editPost, getAllPosts, getPost, type UpdatePostInput } from "../posts.api"
+import { createPost, deletePost, editPost, getAllPosts, getPost, type UpdatePostInput, recordPostView} from "../posts.api"
 
 import { useAuthStore } from "../../../stores/auth.store"
 
@@ -77,6 +77,25 @@ export function useDeletePost() {
         onSuccess: (_result, id) => {
             queryClient.removeQueries({queryKey: PostKeys.detail(id)})
             return queryClient.invalidateQueries({queryKey: PostKeys.lists()})
+        }
+    })
+}
+
+export function useRecordPostView() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: recordPostView,
+        retry: false,
+        onSuccess: async (_result, postId) => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: PostKeys.detail(postId)
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: PostKeys.lists()
+                })
+            ])
         }
     })
 }
