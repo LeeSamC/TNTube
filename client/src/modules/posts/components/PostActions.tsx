@@ -55,7 +55,8 @@ export default function PostActions({post}: {post: Post}) {
 
     const canSubscribe = 
         Boolean(post.userId) &&
-        post.userId !== user?.userId
+        post.userId !== user?.userId &&
+        user !== null
 
     const subscriptionDisabled = 
         subscriptionBusy ||
