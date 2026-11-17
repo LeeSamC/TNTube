@@ -64,6 +64,7 @@ export function PostCard({post}: {post: Post}) {
             <PostMeta
                 username={post.username}
                 createdAt={post.createdAt}
+                viewCount={post.viewCount}
             />
         </article>
     )
