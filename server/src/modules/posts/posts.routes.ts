@@ -622,20 +622,11 @@ router.post('/:id/views', viewLimiter,optionalAuthenticateToken, async(req: Auth
                 viewerKey,
                 lastCountedAt: sql`now() AT TIME ZONE 'UTC'`,
             })
-            .onConflictDoUpdate({
+            .onConflictDoNothing({
                 target: [
                     postViews.postId,
                     postViews.viewerKey,
                 ],
-                set: {
-                    lastCountedAt:
-                        sql`now() AT TIME ZONE 'UTC'`
-                },
-                setWhere: sql`
-                    ${postViews.lastCountedAt}
-                    <= (now() AT TIME ZONE 'UTC')
-                        -interval '24 hours'
-                `,
             })
             .returning({
                 postId: postViews.postId
