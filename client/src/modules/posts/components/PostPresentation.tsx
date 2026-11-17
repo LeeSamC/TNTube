@@ -18,16 +18,27 @@ export function PlayerArtwork() {
     )
 }
 
-export function PostMeta({username, createdAt}: Pick<Post, 'username' | 'createdAt'>){
+export function PostMeta({
+    username,
+    createdAt,
+    viewCount
+}: Pick<Post, 'username' | 'createdAt' | 'viewCount'>) {
     return (
         <div className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-(--muted)'>
             <span className='break-all'>
-                {username ? `@${username}`: 'Unknown creator'}
+                {username ? `@${username}` : 'Unknown creator'}
             </span>
-            <time dateTime={createdAt}>
-                {new Date(createdAt).toLocaleDateString(undefined, {dateStyle: 'medium'})}
-            </time>
 
+            <span>
+                {viewCount.toLocaleString()}{' '}
+                {viewCount === 1 ? 'view': 'views'}
+            </span>
+
+            <time dateTime={createdAt}>
+                {new Date(createdAt).toLocaleDateString(undefined, {
+                    dateStyle: 'medium',
+                })}
+            </time>
         </div>
     )
 }
