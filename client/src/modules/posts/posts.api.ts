@@ -17,6 +17,7 @@ export type Post = {
     description: string | null
     createdAt: string
     updatedAt: string
+    viewCount: number
     userId: string | null
     username: string | null
     likeCount: number
@@ -43,6 +44,18 @@ export type CreatePostInput = {
 }
 
 export type UpdatePostInput = Partial<CreatePostInput>
+
+export type RecordPostViewResponse = {
+    counted: boolean
+    viewCount: number
+}
+
+export function recordPostView(id: string){
+    return api<RecordPostViewResponse>(`/posts/${id}/views`, {
+        method: 'POST',
+        body: {}
+    })
+}
 
 export async function getAllPosts(page = 1, limit = 10, term='') {
     const query = new URLSearchParams({
