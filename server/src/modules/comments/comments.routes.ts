@@ -132,6 +132,10 @@ router.post('/:id', authenticateAccessToken, async (req: AuthenticateReqest, res
             .limit(1)
         }
 
+        if(parentCommentId && !parentComment){
+            return res.status(404).json({error: 'Parent comment not found'})
+        }
+
         const [newComment] = await db.insert(comments).values({
             postId: currentPostId,
             userId: currentUserId,
@@ -142,7 +146,7 @@ router.post('/:id', authenticateAccessToken, async (req: AuthenticateReqest, res
 
         if(parentComment && parentComment.userId !== currentUserId){
             await createNotification({
-                recipientId: post.userId,
+                recipientId: parentComment.userId,
                 actorId: currentUserId,
                 type: 'comment',
                 postId: currentPostId,
