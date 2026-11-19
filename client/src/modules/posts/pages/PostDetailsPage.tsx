@@ -6,6 +6,7 @@ import { ApiError } from "../../../libs/api";
 import { useGetPost, useRecordPostView } from "../hooks/usePosts"; 
 
 import PostActions from "../components/PostActions";
+import PostComments from "../../comments/components/PostComments";
 import { useAuthStore } from "../../../stores/auth.store";
 
 function PostVideo({
@@ -175,6 +176,11 @@ export default function PostDetailPage() {
                             {post.description}
                         </p>
                     )}
+
+                    <PostComments
+                        key={post.postId}
+                        postId={post.postId}
+                    />
                 </article>
             )}
         </main>
