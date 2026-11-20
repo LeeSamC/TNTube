@@ -8,6 +8,7 @@ import notificationRouter from './modules/notifications/notifications.routes.js'
 import postsRouter from './modules/posts/posts.routes.js'
 import reactionsRouter from './modules/reactions/reactions.routes.js'
 import subscriptionsRouter from './modules/subscriptions/subscriptions.routes.js'
+import profileRouter from './modules/users/users.routes.js'
 
 import mediaRouter, {uploadsDirectory} from './modules/media/media.routes.js'
 
@@ -58,5 +59,6 @@ app.use('/api/notifications', notificationRouter)
 app.use('/api/posts', ensureViewerCookie, postsRouter)
 app.use('/api/reactions', reactionsRouter)
 app.use('/api/subscriptions', subscriptionsRouter)
+app.use('/api/profile', profileRouter)
 
 export default app
