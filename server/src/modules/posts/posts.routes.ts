@@ -220,13 +220,53 @@ router.get('/all', optionalAuthenticateToken, async (req: AuthenticateReqest, re
         return res.status(400).json({message: 'Enter a single search term of up to 100 characters'})
     }
 
+    const filters = z.object({
+        authorId: z.uuid().optional(),
+        liked: z.enum(['true', 'false']).optional(),
+    }).safeParse({
+        authorId: req.query.authorId,
+        liked: req.query.liked
+    })
+
+    if(!filters.success){
+        return res.status(400).json({message: 'Invalid post filters'})
+    }
+
+    const likedOnly = filters.data.liked === 'true'
+
+    if(likedOnly && !currentUserId){
+        return res.status(401).json({message: 'Sign in to view your liked posts'})
+    }
+
+    if(likedOnly){
+        res.setHeader('Cache-Control', 'private, no-store')
+    }
+
     const term = search.data
+
     const visiblePosts = and(
         isNull(posts.deletedAt),
-        term ? or(
-            sql`strpos(lower(${posts.title}), lower(${term})) > 0`,
-            sql`strpos(lower(${users.username}), lower(${term})) > 0`
-        ): undefined
+
+        filters.data.authorId
+            ? eq(posts.userId, filters.data.authorId)
+            : undefined,
+
+        likedOnly
+            ? sql`EXIST (
+                SELECT 1
+                FROM ${postReactions}
+                WHERE ${postReactions.postId} = ${posts.postId}
+                AND ${postReactions.userId} = ${currentUserId}
+                AND ${postReactions.type} = 'LIKE'
+            )`
+            : undefined,
+
+        term
+            ? or(
+                sql`strpos(lower(${posts.title}), lower(${term})) > 0`,
+                sql`strpos(lower(${users.username}), lower(${term})) > 0`,
+            )
+            :undefined
     )
 
     try{
